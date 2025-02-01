@@ -8,6 +8,7 @@ from starlette.status import HTTP_400_BAD_REQUEST, HTTP_500_INTERNAL_SERVER_ERRO
 from langchain_google_genai import GoogleGenerativeAI
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnablePassthrough
+from datetime import datetime
 
 
 #setting up logging
@@ -55,7 +56,11 @@ async def global_exception_handler(request, exc):
 @app.get("/")
 async def home():
     logger.info("Root endpoint accessed")
-    return {"message": "API is working"}
+    return {
+            "status": 200,
+            "timestamp": datetime.utcnow().isoformat(),
+            "response": {"topic":"", "data": "API is working",}
+        }
 
 @app.get("/roadmap/{topic}")
 async def get_generated_response(topic: str):
@@ -70,10 +75,18 @@ async def get_generated_response(topic: str):
         logger.info(f"Generating roadmap for {topic}")
         response = get_ai(topic)
         logger.info(f"Successfully generated roadmap for {topic}")
-        return {"roadmap": response}
+        return {
+            "status": 200,
+            "timestamp": datetime.utcnow().isoformat(),
+            "response": {"topic":topic, "data": response}
+        }
     except Exception as e:
         logger.error(f"Error generating roadmap for {topic}: {str(e)}")
         raise HTTPException(
             status_code=HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate roadmap: {str(e)}"
+             detail={
+                "status": 500,
+                "timestamp": datetime.utcnow().isoformat(),
+                "message": f"Failed to generate roadmap: {str(e)}"
+            }
         )
