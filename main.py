@@ -9,6 +9,7 @@ from langchain_google_genai import GoogleGenerativeAI
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from datetime import datetime
+from pydantic import BaseModel
 
 
 #setting up logging
@@ -16,7 +17,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.StreamHandler(),
+        logging.StreamHandler(), 
         RotatingFileHandler(
             'roadmap_api.log',
             maxBytes=10*1024*1024,  # 10MB
@@ -24,6 +25,15 @@ logging.basicConfig(
         )
     ]
 )
+
+class RoadmapResponseModel(BaseModel):
+    topic: str
+    data: str
+
+class RoadmapData(BaseModel):
+    status: int
+    timestamp: str
+    response: RoadmapResponseModel
 
 
 app = FastAPI()
@@ -56,35 +66,52 @@ async def global_exception_handler(request, exc):
 @app.get("/")
 async def home():
     logger.info("Root endpoint accessed")
-    return {
-            "status": 200,
-            "timestamp": datetime.utcnow().isoformat(),
-            "response": {"topic":"", "data": "API is working",}
-        }
+    roadmap_data = RoadmapData(
+            status=200,
+            timestamp=datetime.utcnow().isoformat(),
+            response=RoadmapResponseModel(
+                topic="",
+                data="This service is working"
+            )
+        )
+        
+    return JSONResponse(
+            content=roadmap_data.dict(),
+            media_type="application/json"
+        )
 
-@app.get("/roadmap/{topic}")
+@app.get("/roadmap/{topic}", response_model=RoadmapData)
 async def get_generated_response(topic: str):
-    # input validation
     if not topic or len(topic) > 100:
         logger.warning(f"Invalid topic length: {topic}")
         raise HTTPException(
-            status_code=HTTP_400_BAD_REQUEST,
+            status_code=HTTPStatus.BAD_REQUEST,
             detail="Topic must be between 1-100 characters"
         )
     try:
         logger.info(f"Generating roadmap for {topic}")
         response = get_ai(topic)
         logger.info(f"Successfully generated roadmap for {topic}")
-        return {
-            "status": 200,
-            "timestamp": datetime.utcnow().isoformat(),
-            "response": {"topic":topic, "data": response}
-        }
+        
+        roadmap_data = RoadmapData(
+            status=200,
+            timestamp=datetime.utcnow().isoformat(),
+            response=RoadmapResponseModel(
+                topic=topic,
+                data=response
+            )
+        )
+        
+        return JSONResponse(
+            content=roadmap_data.dict(),
+            media_type="application/json"
+        )
+        
     except Exception as e:
         logger.error(f"Error generating roadmap for {topic}: {str(e)}")
         raise HTTPException(
-            status_code=HTTP_500_INTERNAL_SERVER_ERROR,
-             detail={
+            status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+            detail={
                 "status": 500,
                 "timestamp": datetime.utcnow().isoformat(),
                 "message": f"Failed to generate roadmap: {str(e)}"
